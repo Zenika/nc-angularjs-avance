@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Zengular</title>
+</head>
+<body style="text-align: center">
+<h1 data-zg-bind="nightclazz.sujet" data-zg-click="reset()">Zengular</h1>
+<input type="text" data-zg-model="nightclazz.sujet"/>
+
+<p>Cet exercice à pour but de démystifier le schéma suivant :</p>
+<img src="../angular.png">
+
+<p>... en créant tout simplement notre propre AngularJS</p>
+<hr/>
+<p>Vous partirez de cette page vierge de tout javascript pour construire petit à petit un mini framework qui à pour specs le schéma ci-dessus</p>
+<hr/>
+<b>Activer (F12) à présent votre concole JavaScript sur cette page, éditer ce même fichier et suivez le guide...</b>
+
+<script src="../underscore.js"></script>
+
+<script>
+    /* Zengular framework */
+
+    function Scope() {
+        this.$$watchers = [];
+        this.$$phase = null;
+    }
+
+    Scope.prototype.$$beginPhase = function (phase) {
+        if (this.$$phase) {
+            throw this.$$phase + " est déjà en cours...";
+        }
+        this.$$phase = phase;
+    };
+
+    Scope.prototype.$$clearPhase = function () {
+        this.$$phase = null;
+    };
+
+    Scope.prototype.$watch = function (watcherFn, listenerFn, byValue) {
+        var watcher = {
+            watcherFn: watcherFn,
+            listenerFn: listenerFn,
+            byValue: byValue
+        };
+        this.$$watchers.push(watcher);
+    };
+
+    Scope.prototype.$digest = function () {
+        var that = this;
+        var dirty;
+        var ttl = 10;
+        this.$$beginPhase('$digest');
+        do {
+            dirty = false;
+            _.each(this.$$watchers, function (watcher) {
+                var newValue = watcher.watcherFn(that);
+                if (watcher.byValue ? !_.isEqual(watcher.last, newValue) : watcher.last !== newValue) {
+                    dirty = true;
+                    watcher.listenerFn(newValue, watcher.last, that);
+                    watcher.last = watcher.byValue ? _.clone(newValue) : newValue;
+                }
+            });
+            if (dirty && !(ttl--)) {
+                this.$$clearPhase();
+                throw "$digest est partie en boucle !"
+            }
+        } while (dirty);
+        this.$$clearPhase();
+    };
+
+    var $$directives = {};
+
+    function $directive(name, compileFn) {
+        if (compileFn) {
+            $$directives[name] = compileFn;
+        }
+        return $$directives[name];
+    }
+
+    function $compile(element, scope) {
+        _.each(element.children, function (child) {
+            $compile(child, scope);
+        });
+        _.each(element.attributes, function (attribute) {
+            var directive = $directive(attribute.name);
+            if (directive) {
+                directive(scope, element, element.attributes);
+            }
+        });
+        scope.$digest();
+    }
+
+    $directive('data-zg-bind', function (scope, element, attributes) {
+        scope.$watch(function (scope) {
+            return eval('scope.' + attributes['data-zg-bind'].value);
+        }, function (newValue) {
+            element.innerHTML = newValue;
+        });
+    });
+
+    $directive('data-zg-model', function (scope, element, attributes) {
+        scope.$watch(function (scope) {
+            return eval('scope.' + attributes['data-zg-model'].value);
+        }, function (newValue) {
+            element.value = newValue;
+        });
+        element.addEventListener('keyup', function () {
+            eval('scope.' + attributes['data-zg-model'].value + '="' + element.value + '"');
+            scope.$digest();
+        });
+    });
+
+    $directive('data-zg-click', function (scope, element, attributes) {
+        element.addEventListener('click', function () {
+            eval('scope.' + attributes['data-zg-click'].value);
+            scope.$digest();
+        });
+    });
+</script>
+
+<script>
+    var zenScope = new Scope();
+
+    zenScope.nightclazz = {
+        sujet: 'Zengular',
+        date: new Date(),
+        miseAJour: new Date(),
+        participants: []
+    };
+
+    console.log(zenScope.nightclazz);
+
+    zenScope.$watch(function (scope) {
+        return scope.nightclazz.sujet;
+    }, function (newValue, oldValue, scope) {
+        console.log('Sujet a été modifié de ' + oldValue + ' à ' + newValue);
+    });
+    zenScope.$watch(function (scope) {
+        return scope.nightclazz.participants;
+    }, function (newValue, oldValue, scope) {
+        console.log('Participants a été modifié de ' + oldValue + ' à ' + newValue);
+    }, true);
+
+    zenScope.reset = function(){
+        zenScope.nightclazz.sujet = 'Zengular';
+    };
+
+    console.log(zenScope);
+
+    zenScope.nightclazz.sujet = 'ZengularJS';
+
+    zenScope.$digest();
+
+    zenScope.nightclazz.participants.push('Olivier');
+    zenScope.nightclazz.participants.push('Yoann');
+
+    zenScope.$digest();
+
+    $compile(document, zenScope);
+</script>
+</body>
+</html>
